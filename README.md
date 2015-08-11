@@ -47,6 +47,8 @@ There are three pieces of data returned on each callback:
 ```javascript
 function(elementsHash) {
   var data = elementsHash[element];
-  console.log(data);
+  console.log(data.percentageVisible);
+  console.log(data.percentageTraversed);
+  console.log(data.direction);
 }
 ```
