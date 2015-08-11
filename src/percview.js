@@ -35,98 +35,167 @@
                   window.oRequestAnimationFrame ||
                   function(callback){ window.setTimeout(callback, 1000/60); };
 
-  var doc, _instance;
+  var doc;
+  var intervalId;
+  var instances = {};
+  var uidCounter = 0;
+
   var percview = {
     init: function(options) {
-      return _instance || new PercView(options);
+      if (doc === undefined) {
+        doc = document.documentElement;
+      }
+      var instance = new PercView(options, 'uid_' + ++uidCounter);
+      if (Object.keys(instances).length === 0) {
+        window.addEventListener('resize', updateAllInstances);
+        window.addEventListener('scroll', updateAllInstances);
+        intervalId = setInterval(updateAllInstances, 800);
+      }
+      instances[instance.uid] = instance;
+      return instance;
     },
-    get: function() {
-      return _instance;
+    destroy: function(instance) {
+      if (instances[instance.uid] !== undefined) {
+        delete instances[instance.uid];
+      }
+      if (Object.keys(instances).length === 0) {
+        window.removeEventListener('resize', updateAllInstances);
+        window.removeEventListener('scroll', updateAllInstances);
+        clearInterval(intervalId);
+      }
     }
   };
 
-  function PercView(options) {
-    _instance = this;
-    doc = document.documentElement;
+  function PercView(options, uid) {
+    var _this = this;
+    this.uid = uid;
     options = options || {};
     if (options.elements instanceof Array) {
       // Ensure it is an array, even if it's really a NodeList
-      _instance.elements = Array.prototype.slice.call(options.elements);
+      this.elements = Array.prototype.slice.call(options.elements);
     }
     else if (options.elements instanceof Node) {
-      _instance.elements = [options.elements];
+      this.elements = [options.elements];
     }
     else if (typeof options.elements === 'string') {
-      _instance.elements = Array.prototype.slice.call(doc.getElementsByClassName(options.elements));
+      this.elements = Array.prototype.slice.call(doc.getElementsByClassName(options.elements));
     }
     else {
-      _instance.elements = Array.prototype.slice.call(doc.getElementsByClassName('percview'));
+      this.elements = Array.prototype.slice.call(doc.getElementsByClassName('percview'));
     }
     if (typeof options.callback === 'function') {
-      _instance.callback = options.callback;
+      this.callback = options.callback;
     }
+    if (typeof options.viewportOffset === 'number') {
+      this.viewportOffset = options.viewportOffset;
+    }
+    else {
+      this.viewportOffset = 0;
+    }
+    this.elementOffsets = {};
+    this.positions = {};
+    this.windowHeight;
 
-    _instance.elementOffsets = {};
-    _instance.calculateOffsets();
-    window.addEventListener('resize', _instance._handleResize);
-    window.addEventListener('scroll', _instance._handleScroll);
+    this.calculateOffsets = this.calculateOffsets.bind(_this);
+    this.calculatePositions = this.calculatePositions.bind(_this);
 
-    return _instance;
+    setTimeout(function(){
+      _this.calculateOffsets();
+      _this.calculatePositions();
+    }, 1);
+
+    return this;
   }
 
-  PercView.prototype._handleResize = function() {
-    nextFrame(_instance.calculateOffsets);
-  };
-
-  PercView.prototype._handleScroll = function() {
-    nextFrame(_instance.calculatePositions);
-  };
-
   PercView.prototype.calculateOffsets = function() {
-    for (var i = _instance.elements.length - 1; i >= 0; i--) {
-      _instance.elementOffsets[_instance.elements[i]] = getOffset(_instance.elements[i]);
+    for (var i = this.elements.length - 1; i >= 0; i--) {
+      this.elementOffsets[this.elements[i]] = getOffset(this.elements[i]);
     }
+    this.windowHeight = window.innerHeight;
   };
 
   PercView.prototype.calculatePositions = function() {
-    var retVal = {};
-    for (var i = _instance.elements.length - 1; i >= 0; i--) {
-      retVal[_instance.elements[i]] = _instance.calculatePosition(_instance.elements[i]);
+    for (var i = this.elements.length - 1; i >= 0; i--) {
+      this.positions[this.elements[i]] = this.calculatePosition(this.elements[i]);
     }
-    if (_instance.callback) {
-      _instance.callback.apply(_instance, [retVal]);
+    if (this.callback) {
+      this.callback.apply(this, [this.positions]);
     }
   };
 
   PercView.prototype.calculatePosition = function(element) {
     var scrollOffsetY = getScrollOffsetY();
+    var windowHeight = this.windowHeight - this.viewportOffset;
     var scrollOffsets = {
-      top: scrollOffsetY,
-      bottom: scrollOffsetY + window.innerHeight
+      top: scrollOffsetY + this.viewportOffset,
+      bottom: scrollOffsetY + windowHeight
     };
-    var offsets = _instance.elementOffsets[element];
+    var offsets = this.elementOffsets[element];
+    var relativeOffsets = {
+      top: offsets.top - scrollOffsets.top + this.viewportOffset,
+      bottom: scrollOffsets.bottom - offsets.bottom + this.viewportOffset
+    };
+    var lastVal = this.positions[element];
+    var retVal = {
+      percentageVisible: 0,
+      percentageTraversed: 0,
+      direction: lastVal ? lastVal.direction : undefined
+    };
     // console.log(offsets.top + ',' + offsets.bottom + ',' + scrollOffsets.top + ',' + scrollOffsets.bottom);
-    if ((offsets.top <= scrollOffsets.top && offsets.bottom >= scrollOffsets.bottom) || (offsets.top >= scrollOffsets.top && offsets.bottom <= scrollOffsets.bottom)) {
+    if ((offsets.top >= scrollOffsets.top && offsets.bottom <= scrollOffsets.bottom)) {
       // fully in view
-      return 100;
+      retVal.percentageVisible = 100;
+      if (lastVal && lastVal.direction === 'up') {
+        retVal.percentageTraversed = ((windowHeight - relativeOffsets.top) / windowHeight) * 100;
+      }
+      else if (lastVal && lastVal.direction === 'down') {
+        retVal.percentageTraversed = 100 - ((relativeOffsets.bottom / windowHeight) * 100);
+      }
+      else {
+        retVal.percentageTraversed = 0;
+      }
+    }
+    else if (offsets.top <= scrollOffsets.top && offsets.bottom >= scrollOffsets.bottom) {
+      // fills more than view
+      retVal.percentageVisible = 100;
+      retVal.percentageTraversed = 100;
     }
     else if (offsets.top >= scrollOffsets.bottom || offsets.bottom <= scrollOffsets.top) {
       // out of view
-      return 0;
+      retVal.percentageVisible = 0;
+      retVal.percentageTraversed = 0;
     }
     else if (offsets.top <= scrollOffsets.bottom && offsets.top >= scrollOffsets.top){
       // partially in view from bottom
-      return ((scrollOffsets.bottom - offsets.top) / offsets.height) * 100;
+      retVal.percentageVisible = ((scrollOffsets.bottom - offsets.top) / offsets.height) * 100;
+      // if last value was out of view
+      if (lastVal === undefined || lastVal.percentageVisible === 0 || lastVal.direction === 'up') {
+        retVal.direction = 'up';
+        retVal.percentageTraversed = ((windowHeight - relativeOffsets.top) / windowHeight) * 100;
+      }
+      else {
+        retVal.percentageTraversed = 100 - ((relativeOffsets.bottom / windowHeight) * 100);
+      }
     }
     else if (offsets.top <= scrollOffsets.top && offsets.bottom >= scrollOffsets.top) {
       // partially in view from top
-      return ((offsets.bottom - scrollOffsets.top) / offsets.height) * 100;
+      retVal.percentageVisible = ((offsets.bottom - scrollOffsets.top) / offsets.height) * 100;
+      if (lastVal === undefined || lastVal.percentageVisible === 0 || lastVal.direction === 'down') {
+        retVal.direction = 'down';
+        retVal.percentageTraversed = 100 - ((relativeOffsets.bottom / windowHeight) * 100);
+      }
+      else {
+        retVal.percentageTraversed = ((windowHeight - relativeOffsets.top) / windowHeight) * 100;
+      }
     }
     else {
-      console.log('no idea');
       // no idea
-      return 0;
+      retVal.percentageVisible = 0;
+      retVal.percentageTraversed = 0;
     }
+    retVal.percentageTraversed = (Math.min(100, Math.max(0, retVal.percentageTraversed)));
+
+    return retVal;
   };
 
   function getOffset(element) {
@@ -148,6 +217,20 @@
   function getScrollOffsetY() {
     return (window.pageYOffset || doc.scrollTop) - (doc.clientTop || 0);
   }
+
+  function updateAllInstances() {
+    for (var instance_uid in instances) {
+      updateInstance(instances[instance_uid]);
+    }
+  }
+
+  function updateInstance(instance) {
+    nextFrame(function(){
+      instance.calculateOffsets.apply(instance);
+      instance.calculatePositions.apply(instance);
+    });
+  }
+
 
   if(typeof define === 'function' && define.amd) {
     define([], function () {

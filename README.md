@@ -28,14 +28,25 @@ The callback will be called each time the window is scrolled.
         callback: [function]
       });
     });
+
+    // to destroy an instance
+    percview.destroy(pv);
   </script>
 ```
 
 ## Callback
-A hash keyed to the elements you are onbserving is returned.
+A hash keyed to the elements you are observing is returned. This is obviously not optimal, since javascript
+doesn't actually support using objects as keys :\ I'll update this later to work differently.
+
+There are three pieces of data returned on each callback:
+
+* __percentageVisible__ - The percent amount of the element that is currently visible in the viewport.
+* __percentageTraversed__ - The percent amount of the viewport the element has traversed, based on it's current direction.
+* __direction__ - The current direction the element is traversing. _Only updates when the element moves into the visible range right now. Will fix this later._
 
 ```javascript
 function(elementsHash) {
-  var percentVisible = elementsHash[element];
+  var data = elementsHash[element];
+  console.log(data);
 }
 ```
