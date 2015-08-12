@@ -83,6 +83,11 @@
     else {
       this.elements = Array.prototype.slice.call(doc.getElementsByClassName('percview'));
     }
+
+    for (var i = this.elements.length - 1; i >= 0; i--) {
+      this.elements[i]._percview_uid = 'uid_' + ++uidCounter;
+    };
+
     if (typeof options.callback === 'function') {
       this.callback = options.callback;
     }
@@ -107,19 +112,28 @@
     return this;
   }
 
+  PercView.prototype.getPercentages = function(elementOrUniqueID) {
+    if (typeof elementOrUniqueID === 'string') {
+      return this.positions[elementOrUniqueID];
+    }
+    else {
+      return this.positions[elementOrUniqueID._percview_uid];
+    }
+  }
+
   PercView.prototype.calculateOffsets = function() {
     for (var i = this.elements.length - 1; i >= 0; i--) {
-      this.elementOffsets[this.elements[i]] = getOffset(this.elements[i]);
+      this.elementOffsets[this.elements[i]._percview_uid] = getOffset(this.elements[i]);
     }
     this.windowHeight = window.innerHeight;
   };
 
   PercView.prototype.calculatePositions = function() {
     for (var i = this.elements.length - 1; i >= 0; i--) {
-      this.positions[this.elements[i]] = this.calculatePosition(this.elements[i]);
+      this.positions[this.elements[i]._percview_uid] = this.calculatePosition(this.elements[i]);
     }
     if (this.callback) {
-      this.callback.apply(this, [this.positions]);
+      this.callback.apply(this);
     }
   };
 
@@ -130,12 +144,12 @@
       top: scrollOffsetY + this.viewportOffset,
       bottom: scrollOffsetY + windowHeight
     };
-    var offsets = this.elementOffsets[element];
+    var offsets = this.elementOffsets[element._percview_uid];
     var relativeOffsets = {
       top: offsets.top - scrollOffsets.top + this.viewportOffset,
       bottom: scrollOffsets.bottom - offsets.bottom + this.viewportOffset
     };
-    var lastVal = this.positions[element];
+    var lastVal = this.positions[element._percview_uid];
     var retVal = {
       percentageVisible: 0,
       percentageTraversed: 0,

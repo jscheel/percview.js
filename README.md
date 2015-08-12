@@ -4,6 +4,9 @@ active development and doesn't really do a good job of reflecting an abstracted 
 it for some scrolling behaviors, so this is what you get. Will document once I settle on how this
 plugin actually needs to behave for users. I will also distribute to bower at that point.
 
+## Browser Support
+PercView.js works on modern browsers and >= IE9.
+
 ## Initializing
 You can initialize percview.js with one of three element selections:
 
@@ -35,8 +38,7 @@ The callback will be called each time the window is scrolled.
 ```
 
 ## Callback
-A hash keyed to the elements you are observing is returned. This is obviously not optimal, since javascript
-doesn't actually support using objects as keys :\ I'll update this later to work differently.
+To get the percentages of a particular element, pass that element into `this.getPercentages(element)` during  your callback.
 
 There are three pieces of data returned on each callback:
 
@@ -45,10 +47,10 @@ There are three pieces of data returned on each callback:
 * __direction__ - The current direction the element is traversing. _Only updates when the element moves into the visible range right now. Will fix this later._
 
 ```javascript
-function(elementsHash) {
-  var data = elementsHash[element];
-  console.log(data.percentageVisible);
-  console.log(data.percentageTraversed);
-  console.log(data.direction);
-}
+  function() {
+    var data = this.getPercentages(element);
+    console.log(data.percentageVisible);
+    console.log(data.percentageTraversed);
+    console.log(data.direction);
+  }
 ```
